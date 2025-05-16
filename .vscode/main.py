@@ -19,6 +19,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from scipy.signal import iirnotch, butter, lfilter, filtfilt
 from bleak import BleakScanner, BleakClient
+from collections import deque
+import time
 
 # =====================================
 # Fixed Service/Characteristic UUIDs
@@ -173,6 +175,8 @@ def accelerometer_callback(sender, data):
     timeRaw = (data[3] << 24 | data[2] << 16 | data[1] << 8 | data[0])
     timestamp = timeRaw / 32.768 / 1000 # ms 단위를 나누기 하여 sec 단위로
 
+    # 데이터 구조가 6바이트 단위로 반복되는 형식
+    # 총 30개의 샘플이면 30 * 6 = 180바이트 + 앞 4바이트 헤더 = 184 바이트
     for i in range(4, 184, 6):
         # accDataX = (data[i] << 8 | data[i+1])
         # accDataY = (data[i+2] << 8 | data[i+3])
@@ -198,6 +202,7 @@ def accelerometer_callback(sender, data):
             timestamp += 1.0 / ACC_SAMPLE_RATE  # 다음 샘플 타임스탬프 증가    
         
         # print(f"{data[i]},{data[i+1]}, - {data[i+2]},{data[i+3]}, - {data[i+4]},{data[i+5]} - {accDataX},{accDataY},{accDataZ}")
+        global_app.acc_times.append(time.time())
     
 def battery_callback(sender, data):
     battery_level = int.from_bytes(data, byteorder='little')
@@ -211,7 +216,7 @@ def eeg_notify_callback(sender, data):
     timestamp = timeRaw / 32.768 / 1000 # ms 단위를 나누기 하여 sec 단위로
     # print(f"{timeRaw},{timestamp},{data[0]},{data[1]},{data[2]},{data[3]}")
 
-    # 데이터 구조가 7바이트 단위로 반복되는 형식이고, 각 7바이트에서 ch1/ch2가 각각 3바이트씩 있음
+    # 데이터 구조가 7바이트 단위로 반복되는 형식이고, 각 7바이트에서 ch1/ch2가 각각 3바이트씩 있음, 맨 앞 1바이트는 lead-off
     # 총 25개의 샘플이면 25 * 7 = 175바이트 + 앞 4바이트 헤더 = 179 바이트
     for i in range(4, 179, 7):
         # lead-off
@@ -237,7 +242,9 @@ def eeg_notify_callback(sender, data):
         # CSV 파일에 기록
         if recording:
             eeg_writer.writerow([timestamp, leadOff_raw, ch1_uv, ch2_uv])
-            timestamp += 1.0 / EEG_SAMPLE_RATE  # 다음 샘플 타임스탬프 증가            
+            timestamp += 1.0 / EEG_SAMPLE_RATE  # 다음 샘플 타임스탬프 증가
+              
+        global_app.eeg_times.append(time.time())          
 
 
 def ppg_callback(sender, data):
@@ -248,7 +255,9 @@ def ppg_callback(sender, data):
     timeRaw = (data[3] << 24 | data[2] << 16 | data[1] << 8 | data[0])
     timestamp = timeRaw / 32.768 / 1000 # ms 단위를 나누기 하여 sec 단위로
 
-    for i in range(4, 168, 6):
+    # 데이터 구조가 6바이트 단위로 반복되는 형식, 앞에 3바이트는 PPG RED, 다음 3바이트는 PPG IR
+    # 총 28개의 샘플이면 28 * 6 = 168바이트 + 앞 4바이트 헤더 = 172 바이트
+    for i in range(4, 172, 6):
         ppgRedData = (data[i] << 16 | data[i+1] << 8 | data[i+2])
         ppgIRData = (data[i+3] << 16 | data[i+4] << 8 | data[i+5])
         data_buffer["ppg"].append(ppgRedData)
@@ -256,8 +265,10 @@ def ppg_callback(sender, data):
 
         # CSV 파일에 기록
         if recording:
-            ppg_writer.writerow([timestamp, ppgRedData])
+            ppg_writer.writerow([timestamp, ppgRedData, ppgIRData])
             timestamp += 1.0 / PPG_SAMPLE_RATE
+    
+        global_app.ppg_times.append(time.time())
 
 # =====================================
 # BLE Scanning and Connection Functions
@@ -458,7 +469,6 @@ class App:
         self.rescan_button = tk.Button(btn_frame, text="Rescan Devices", command=self.rescan_ble)
         self.rescan_button.pack(side=tk.LEFT, padx=5)
         
-        
         # Battery information label
         self.battery_info_label = tk.Label(left_frame, text="Battery Info: N/A")
         self.battery_info_label.pack(pady=5)
@@ -540,7 +550,6 @@ class App:
         self.fig, self.axs = plt.subplots(4, 1, figsize=(10, 10))  # 너비 키움
         self.fig.tight_layout(pad=3.0)
 
-        
         # EEG Channel 1 (subplot 0)
         self.line_eeg1, = self.axs[0].plot([], [], label="EEG Channel 1")
         self.axs[0].legend()
@@ -558,6 +567,12 @@ class App:
         self.line_acc_y, = self.axs[3].plot([], [], label="Acc Y")
         self.line_acc_z, = self.axs[3].plot([], [], label="Acc Z")
         self.axs[3].legend()
+
+        # Sampling rate
+        self.eeg_times = deque()
+        self.ppg_times = deque()
+        self.acc_times = deque()
+        self.root.after(1000, self.compute_sampling_rate)
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -584,7 +599,7 @@ class App:
             ppg_writer = csv.writer(ppg_file)
             acc_writer = csv.writer(acc_file)
             eeg_writer.writerow(['timestamp', 'lead-off', 'ch1(µV)', 'ch2(µV)'])
-            ppg_writer.writerow(['timestamp', 'ppg_raw'])
+            ppg_writer.writerow(['timestamp', 'ppg_red', 'ppg_ir'])
             acc_writer.writerow(['timestamp', 'acc_x', 'acc_y', 'acc_z'])
 
             recording = True
@@ -863,6 +878,7 @@ class App:
                 # self.bpm_label.config(text=f"BPM: {bpm_val:.1f}")
                 spo2 = calculate_spo2(recent_ppg, recent_ppg_ir)
                 print(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
+                self.add_message(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
                 # print(wd['RR_list'])
                 
             else:
@@ -877,6 +893,34 @@ class App:
             if not disconnect_requested:                
                 self.root.after(1000, self.update_bpm)  # 1초마다 반복
     
+    # 1초마다 EEG, PPG, ACC 샘플링 레이트 카운트 리포트
+    def compute_sampling_rate(self):
+        now = time.time()
+        # EEG: 10초 이전 데이터는 제거
+        while self.eeg_times and self.eeg_times[0] < now - 10:
+            self.eeg_times.popleft()
+        # PPG
+        while self.ppg_times and self.ppg_times[0] < now - 10:
+            self.ppg_times.popleft()
+        # ACC
+        while self.acc_times and self.acc_times[0] < now - 10:
+            self.acc_times.popleft()
+
+        # 윈도우 내 샘플 개수 / 10초 → Hz
+        eeg_rate = len(self.eeg_times) / 10.0
+        ppg_rate = len(self.ppg_times) / 10.0
+        acc_rate = len(self.acc_times) / 10.0
+
+        # 로그창에도 출력
+        self.add_message(
+            f"[Sampling Rate] EEG: {eeg_rate:.1f} Hz, "
+            f"PPG: {ppg_rate:.1f} Hz, "
+            f"ACC: {acc_rate:.1f} Hz"
+        )
+
+        # 1초 후에 다시 계산
+        self.root.after(1000, self.compute_sampling_rate)
+        
     # Service toggle buttons (called by UI)
     def toggle_accelerometer_service(self):
         toggle_accelerometer(self)
