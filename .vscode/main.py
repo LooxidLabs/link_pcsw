@@ -514,13 +514,13 @@ class App:
         record_frame.pack(pady=5)
         self.record_btn = tk.Button(record_frame, text="Start Recording", command=self.toggle_recording)
         self.record_btn.pack(side=tk.LEFT)
-        # ⏱️ 레코딩 타이머 라벨 추가
+        # 레코딩 타이머 라벨 추가
         self.record_timer_label = tk.Label(record_frame, text="00:00", font=("Arial", 12))
         self.record_timer_label.pack(side=tk.LEFT, padx=10)
         self.rcd_status_label = tk.Label(record_frame, text="Recording: OFF", font=("Arial", 12))
         self.rcd_status_label.pack(side=tk.LEFT, padx=5)
 
-        # ⏱️ 레코딩 타이머 라벨 추가
+        # 레코딩 타이머 라벨 추가
         # self.record_timer_label = tk.Label(record_frame, text="00:00", font=("Arial", 10))
         # self.record_timer_label.pack(side=tk.LEFT, padx=10)
 
@@ -624,7 +624,7 @@ class App:
             eeg_file = ppg_file = acc_file = None
             eeg_writer = ppg_writer = acc_writer = None
             
-            # 🕒 녹음 시간 계산
+            # 녹음 시간 계산
             if self.record_start_time is not None:
                 duration = int(time.time() - self.record_start_time)
                 minutes = duration // 60
