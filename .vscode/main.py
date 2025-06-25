@@ -273,8 +273,12 @@ def ppg_callback(sender, data):
 # =====================================
 # BLE Scanning and Connection Functions
 # =====================================
-async def scan_ble_devices():
+async def scan_ble_devices(filter_lxb_only=False):
     devices = await BleakScanner.discover()
+    if filter_lxb_only:
+        # LXB로 시작하는 디바이스만 필터링
+        filtered_devices = [dev for dev in devices if dev.name and dev.name.startswith('LXB')]
+        return filtered_devices
     return devices
 
 async def connect_ble(device_address):
@@ -469,6 +473,15 @@ class App:
         self.rescan_button = tk.Button(btn_frame, text="Rescan Devices", command=self.rescan_ble)
         self.rescan_button.pack(side=tk.LEFT, padx=5)
         
+        # LXB 필터링 체크박스 추가
+        filter_frame = tk.Frame(left_frame)
+        filter_frame.pack(pady=5)
+        self.lxb_filter_var = tk.BooleanVar(value=True)
+        self.lxb_filter_checkbox = tk.Checkbutton(filter_frame, text="Show LXB devices only", 
+                                                 variable=self.lxb_filter_var, 
+                                                 command=self.on_filter_changed)
+        self.lxb_filter_checkbox.pack(side=tk.LEFT)
+        
         # Battery information label
         self.battery_info_label = tk.Label(left_frame, text="Battery Info: N/A")
         self.battery_info_label.pack(pady=5)
@@ -505,10 +518,14 @@ class App:
         self.bandpass_button = tk.Button(service_frame, text="Bandpass Filter: Off", command=self.toggle_bandpass)
         self.bandpass_button.pack(fill=tk.X, padx=5, pady=2)
 
-         # FFT 버튼 - EEG1, EEG2 FFT를 한 창에서 구분하여 보여줌
-        self.fft_button = tk.Button(left_frame, text="Show FFT", command=self.show_fft)
-        self.fft_button.pack(pady=5)        
-        
+        # Start/Stop All Sensors 버튼을 좌우로 배치할 프레임 생성
+        all_sensors_frame = tk.Frame(service_frame)
+        all_sensors_frame.pack(fill=tk.X, padx=5, pady=8)
+        self.start_all_btn = tk.Button(all_sensors_frame, text="Start All Sensors", command=self.start_all_sensors)
+        self.start_all_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.stop_all_btn = tk.Button(all_sensors_frame, text="Stop All Sensors", command=self.stop_all_sensors)
+        self.stop_all_btn.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+
         # --- 2. Record 버튼 추가 ---
         record_frame = tk.Frame(left_frame)
         record_frame.pack(pady=5)
@@ -520,12 +537,9 @@ class App:
         self.rcd_status_label = tk.Label(record_frame, text="Recording: OFF", font=("Arial", 12))
         self.rcd_status_label.pack(side=tk.LEFT, padx=5)
 
-        # 레코딩 타이머 라벨 추가
-        # self.record_timer_label = tk.Label(record_frame, text="00:00", font=("Arial", 10))
-        # self.record_timer_label.pack(side=tk.LEFT, padx=10)
-
-        self.record_start_time = None  # 시작 시각 저장용
-
+        # BPM 표시 라벨을 record_frame 바로 아래에 배치
+        self.bpm_label = tk.Label(left_frame, text="BPM: --", font=("Arial", 12))
+        self.bpm_label.pack(pady=5)
 
         # --- 새로 추가: 메시지 로그용 리스트박스 (스크롤 가능) ---
         log_frame = tk.Frame(left_frame)
@@ -572,7 +586,7 @@ class App:
         self.eeg_times = deque()
         self.ppg_times = deque()
         self.acc_times = deque()
-        self.root.after(1000, self.compute_sampling_rate)
+        # self.root.after(1000, self.compute_sampling_rate)  # 주기적 실행 비활성화
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
@@ -769,6 +783,11 @@ class App:
         filter_bandpass_enabled = not filter_bandpass_enabled
         self.bandpass_button.config(text="Bandpass Filter: " + ("On" if filter_bandpass_enabled else "Off"))
 
+    # LXB 필터 변경 시 자동으로 스캔 다시 실행
+    def on_filter_changed(self):
+        self.add_message(f"LXB filter {'enabled' if self.lxb_filter_var.get() else 'disabled'}")
+        self.rescan_ble()
+
     # 새로운 메시지를 추가하고 자동 스크롤하는 함수
     def add_message(self, message):
         self.message_listbox.insert(tk.END, message)
@@ -864,7 +883,7 @@ class App:
         try:
             recent_ppg = np.array(data_buffer["ppg"][-500:])  # 10초치 (50Hz)
             recent_ppg_ir  = np.array(data_buffer["ppg_ir"][-500:])
-            print("recent_ppg length:", len(recent_ppg))
+            # print("recent_ppg length:", len(recent_ppg))
             if len(recent_ppg) >= 250 and len(recent_ppg_ir) >= 250:  # 최소한 5초 이상 확보
                 # wd, m = hp.process(recent_ppg, sample_rate=PPG_SAMPLE_RATE)
                 # print("wd:", wd)
@@ -875,20 +894,20 @@ class App:
                 bpm_val = m['bpm']
                 sdnn_val = m['sdnn']
                 ibi_val = m['ibi']
-                # self.bpm_label.config(text=f"BPM: {bpm_val:.1f}")
+                self.bpm_label.config(text=f"BPM: {bpm_val:.1f}")
                 spo2 = calculate_spo2(recent_ppg, recent_ppg_ir)
-                print(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
-                self.add_message(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
+                # print(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
+                # self.add_message(f"BPM: {bpm_val:.1f}, SDNN: {sdnn_val:.1f} ms, IBI: {ibi_val:.1f} ms, SPO2: {spo2:.1f}%")
                 # print(wd['RR_list'])
                 
             else:
-                # self.bpm_label.config(text="BPM: --")
-                print("BPM:--")
+                self.bpm_label.config(text="BPM: --")
+                # print("BPM:--")
         except Exception as e:
             # 노이즈 등으로 분석 실패할 경우
-            # self.bpm_label.config(text="BPM: --")
+            self.bpm_label.config(text="BPM: --")
             print("Error in update_bpm:", e)
-            print("BPM:xx")
+            # print("BPM:xx")
         finally:
             if not disconnect_requested:                
                 self.root.after(1000, self.update_bpm)  # 1초마다 반복
@@ -919,7 +938,7 @@ class App:
         )
 
         # 1초 후에 다시 계산
-        self.root.after(1000, self.compute_sampling_rate)
+        # self.root.after(1000, self.compute_sampling_rate)
         
     # Service toggle buttons (called by UI)
     def toggle_accelerometer_service(self):
@@ -933,13 +952,37 @@ class App:
     def toggle_ppg_service(self):
         toggle_ppg(self)
 
+    def start_all_sensors(self):
+        self.add_message("[All Sensors] Accelerometer 시작...")
+        toggle_accelerometer(self)
+        self.root.after(200, lambda: [
+            self.add_message("[All Sensors] PPG 시작..."),
+            toggle_ppg(self)
+        ])
+        self.root.after(200, lambda: [
+            self.add_message("[All Sensors] EEG Notify 시작..."),
+            toggle_eeg_notify(self)
+        ])
+
+    def stop_all_sensors(self):
+        self.add_message("[All Sensors] Accelerometer 정지...")
+        toggle_accelerometer(self)
+        self.root.after(200, lambda: [
+            self.add_message("[All Sensors] PPG 정지..."),
+            toggle_ppg(self)
+        ])
+        self.root.after(200, lambda: [
+            self.add_message("[All Sensors] EEG Notify 정지..."),
+            toggle_eeg_notify(self)
+        ])
+
 
 # =====================================
 # BLE Device Scan in Background
 # =====================================
 def scan_devices_background(app):
     global_app.add_message("Scan BLE devices...")
-    devices = asyncio.run(scan_ble_devices())
+    devices = asyncio.run(scan_ble_devices(app.lxb_filter_var.get()))
     app.root.after(0, lambda: app.update_device_list(devices))
 
 # =====================================
