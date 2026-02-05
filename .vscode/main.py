@@ -1,3 +1,5 @@
+# macOS: Tk GUI는 Cursor 내부 터미널에서 실행 시 크래시할 수 있음.
+# Terminal.app에서 실행하거나 프로젝트 루트의 run_app.command 를 사용하세요.
 import asyncio
 import threading
 import queue

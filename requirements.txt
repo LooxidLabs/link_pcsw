@@ -1,46 +1,15 @@
 # 링크밴드 2.0 PC 소프트웨어 - Python 패키지 의존성
-# BLE 통신, GUI, 데이터 분석, 그래프, 실시간 처리
+# pip install -r requirements.txt
 
 # BLE 통신
 bleak>=0.22.0
 
-# 데이터 처리 및 수치 계산
+# 수치 계산 및 신호 처리
 numpy>=1.24.0
-pandas>=2.0.0
 scipy>=1.10.0
 
-# 그래프 및 시각화
+# 그래프 및 시각화 (TkAgg 백엔드 사용)
 matplotlib>=3.7.0
 
 # 심박수 및 생체신호 분석
 heartpy>=1.2.0
-
-# GUI (Python 기본 포함)
-# tkinter - Python 기본 포함
-
-# 비동기 처리
-asyncio  # Python 3.7+ 기본 포함
-
-# 파일 처리
-pathlib  # Python 3.4+ 기본 포함
-
-# 시간 처리
-datetime  # Python 기본 포함
-
-# 시스템 및 OS
-platform  # Python 기본 포함
-sys  # Python 기본 포함
-os  # Python 기본 포함
-
-# 스레딩
-threading  # Python 기본 포함
-
-# 큐 및 데이터 구조
-queue  # Python 기본 포함
-collections  # Python 기본 포함
-
-# CSV 처리
-csv  # Python 기본 포함
-
-# 시간 측정
-time  # Python 기본 포함
