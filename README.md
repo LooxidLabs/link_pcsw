@@ -1,13 +1,24 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW
+링크밴드 2.0 버전을 테스트하기 위한 PC SW. **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-## 실행 방법 (macOS)
-Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 크래시(SIGABRT)할 수 있습니다.  
-반드시 **macOS Terminal.app**(또는 iTerm)에서 실행하세요.
+## 실행 방법
 
-- **방법 1**: Finder에서 `run_app.command` 더블클릭 (Terminal에서 자동 실행)
+### Windows
+- **방법 1**: `run_app.bat` 더블클릭 (가상환경 활성화 후 실행)
+- **방법 2**: 명령 프롬프트에서 직접 실행
+  ```cmd
+  cd C:\path\to\link_pcsw
+  .venv\Scripts\activate
+  python .vscode\main.py
+  ```
+- BLE 사용 시 **Windows 10 버전 16299**(Fall Creators Update) 이상 필요.
+
+### macOS
+Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 크래시(SIGABRT)할 수 있으므로, **Terminal.app**에서 실행하세요.
+
+- **방법 1**: Finder에서 `run_app.command` 더블클릭
 - **방법 2**: 터미널에서 직접 실행
   ```bash
   cd /path/to/link_pcsw
