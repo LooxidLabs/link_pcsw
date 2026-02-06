@@ -751,7 +751,8 @@ class App:
         except tk.TclError:
             self.add_message("Select a device")
             return
-        device_address = selected.split(":")[-1].strip()
+        # "Name: FC:08:70:EA:EC:98" → 첫 번째 ':' 기준으로만 분리해 주소 전체 추출
+        device_address = selected.split(":", 1)[1].strip()
         threading.Thread(target=ble_thread_main, args=(device_address,), daemon=True).start()
         self.add_message(f"{selected} Connecting...")
     
