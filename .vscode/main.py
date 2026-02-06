@@ -297,7 +297,7 @@ async def connect_ble(device_address):
             await asyncio.sleep(1)
     except Exception as e:
         #print("BLE connection error:", e)
-        global_app.add_message("BLE connection error:{e}")
+        global_app.add_message(f"BLE connection error: {e}")
     finally:
         await client.disconnect()
         global_ble_client = None
