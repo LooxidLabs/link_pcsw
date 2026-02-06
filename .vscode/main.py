@@ -956,28 +956,32 @@ class App:
         toggle_ppg(self)
 
     def start_all_sensors(self):
-        self.add_message("[All Sensors] Accelerometer 시작...")
-        toggle_accelerometer(self)
-        self.root.after(200, lambda: [
-            self.add_message("[All Sensors] PPG 시작..."),
-            toggle_ppg(self)
-        ])
-        self.root.after(200, lambda: [
-            self.add_message("[All Sensors] EEG Notify 시작..."),
-            toggle_eeg_notify(self)
-        ])
+        # 이미 켜진 센서는 토글하지 않음 (반복 클릭 시 꺼지는 현상 방지)
+        if not self.accelerometer_running:
+            self.add_message("[All Sensors] Accelerometer 시작...")
+            toggle_accelerometer(self)
+        self.root.after(200, lambda: (
+            [self.add_message("[All Sensors] PPG 시작..."), toggle_ppg(self)]
+            if not self.ppg_running else None
+        ))
+        self.root.after(200, lambda: (
+            [self.add_message("[All Sensors] EEG Notify 시작..."), toggle_eeg_notify(self)]
+            if not self.eeg_notify_running else None
+        ))
 
     def stop_all_sensors(self):
-        self.add_message("[All Sensors] Accelerometer 정지...")
-        toggle_accelerometer(self)
-        self.root.after(200, lambda: [
-            self.add_message("[All Sensors] PPG 정지..."),
-            toggle_ppg(self)
-        ])
-        self.root.after(200, lambda: [
-            self.add_message("[All Sensors] EEG Notify 정지..."),
-            toggle_eeg_notify(self)
-        ])
+        # 이미 꺼진 센서는 토글하지 않음 (반복 클릭 시 다시 켜지는 현상 방지)
+        if self.accelerometer_running:
+            self.add_message("[All Sensors] Accelerometer 정지...")
+            toggle_accelerometer(self)
+        self.root.after(200, lambda: (
+            [self.add_message("[All Sensors] PPG 정지..."), toggle_ppg(self)]
+            if self.ppg_running else None
+        ))
+        self.root.after(200, lambda: (
+            [self.add_message("[All Sensors] EEG Notify 정지..."), toggle_eeg_notify(self)]
+            if self.eeg_notify_running else None
+        ))
 
 
 # =====================================
