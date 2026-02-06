@@ -69,3 +69,11 @@ Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 �
 1. PPG IR 센싱추가로 파일 레코딩 기능 추가
 2. 샘플링 레이트 계산을 위한 코드 추가
 3. 주석에 있는 이모티콘 삭제
+
+### 2026-02-06
+1. 맥OS Cursor 내부 터미널 실행 시 Tk 크래시 대응 — `run_app.command` 추가
+2. 윈도우 `run_app.bat` 추가
+3. `requirements.txt` 정리 — 실제 사용 패키지만 유지(bleak, numpy, scipy, matplotlib, heartpy), setuptools 추가(Windows에서 heartpy `pkg_resources` 오류 방지), 표준 라이브러리·pandas 제거
+4. `main.py`에서 `"BLE connection error:{e}"` → `f"BLE connection error: {e}"` 로 수정해 예외 메시지가 로그에 출력되도록 함
+5. 디바이스 선택 시 `split(":")[-1]`로 인해 주소 일부만 전달되던 문제 수정 — `split(":", 1)[1].strip()`으로 전체 주소 사용
+6. 시작/종료 반복 클릭 시 토글로 인해 한 번 켜짐/한 번 꺼짐이 반복되던 현상 수정
