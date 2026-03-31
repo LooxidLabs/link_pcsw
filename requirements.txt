@@ -1,8 +1,8 @@
 # 링크밴드 2.0 PC 소프트웨어 - Python 패키지 의존성
 # pip install -r requirements.txt
 
-# heartpy 등이 사용하는 pkg_resources 제공 (Windows 등 신규 venv에서 필요)
-setuptools>=65.0.0
+# heartpy uses pkg_resources; keep setuptools in compatible range
+setuptools>=65.0.0,<81
 
 # BLE 통신
 bleak>=0.22.0
