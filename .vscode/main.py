@@ -95,8 +95,11 @@ eeg_writer = None
 ppg_writer = None
 acc_writer = None
 
-# 실행 파일(스크립트) 기준 raw_data 폴더 경로
-RAW_DIR = Path(__file__).parent / 'raw_data'
+# 실행 위치 기준 raw_data 폴더 경로
+# - python 실행: main.py 위치(.vscode) 기준
+# - 배포 exe 실행(PyInstaller): exe 파일 위치 기준
+APP_BASE_DIR = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).parent
+RAW_DIR = APP_BASE_DIR / 'raw_data'
 
 
 # =====================================
@@ -435,6 +438,20 @@ def toggle_ppg(self):
 
 
 # =====================================
+# Main window size (pixels, logical)
+# =====================================
+# FHD(1920x1080) 기준 권장 시작 크기. 좌측 패널(~420px) + 그래프(~800px) + 여백.
+MAIN_WINDOW_DEFAULT_W = 1536
+MAIN_WINDOW_DEFAULT_H = 864
+# 최소 크기: HD급(1280x720)에서도 대부분 UI가 보이도록
+MAIN_WINDOW_MIN_W = 1280
+MAIN_WINDOW_MIN_H = 720
+# matplotlib 메인 플롯: 10x10인치(약 1000px)는 1366폭에서 잘림 → 8x8인치 @100dpi 권장
+MAIN_PLOT_FIGSIZE_INCH = (8, 8)
+MAIN_PLOT_DPI = 100
+
+
+# =====================================
 # Tkinter and matplotlib GUI Class (App)
 # =====================================
 class App:
@@ -539,9 +556,19 @@ class App:
         self.rcd_status_label = tk.Label(record_frame, text="Recording: OFF", font=("Arial", 12))
         self.rcd_status_label.pack(side=tk.LEFT, padx=5)
 
-        # BPM 표시 라벨을 record_frame 바로 아래에 배치
-        self.bpm_label = tk.Label(left_frame, text="BPM: --", font=("Arial", 12))
-        self.bpm_label.pack(pady=5)
+        # BPM 표시 + 계산 활성화 체크박스
+        bpm_frame = tk.Frame(left_frame)
+        bpm_frame.pack(pady=5)
+        self.bpm_label = tk.Label(bpm_frame, text="BPM: --", font=("Arial", 12))
+        self.bpm_label.pack(side=tk.LEFT)
+        self.bpm_calc_enabled_var = tk.BooleanVar(value=False)  # 기본: 비활성화
+        self.bpm_calc_checkbox = tk.Checkbutton(
+            bpm_frame,
+            text="BPM 계산",
+            variable=self.bpm_calc_enabled_var,
+            command=self.on_bpm_calc_toggle
+        )
+        self.bpm_calc_checkbox.pack(side=tk.LEFT, padx=8)
 
         # --- 새로 추가: 메시지 로그용 리스트박스 (스크롤 가능) ---
         log_frame = tk.Frame(left_frame)
@@ -563,7 +590,9 @@ class App:
         # Create 4 subplots: EEG Channel 1, EEG Channel 2, PPG Data, Accelerometer Data
         right_frame = tk.Frame(root)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=10, pady=10)
-        self.fig, self.axs = plt.subplots(4, 1, figsize=(10, 10))  # 너비 키움
+        self.fig, self.axs = plt.subplots(
+            4, 1, figsize=MAIN_PLOT_FIGSIZE_INCH, dpi=MAIN_PLOT_DPI
+        )
         self.fig.tight_layout(pad=3.0)
 
         # EEG Channel 1 (subplot 0)
@@ -592,8 +621,35 @@ class App:
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
+
+        self._apply_main_window_geometry()
+
         self.update_plot()
+
+    def _apply_main_window_geometry(self):
+        """시작 시 창이 화면 밖으로 잘리지 않도록 픽셀 크기·최소 크기·중앙 배치."""
+        self.root.update_idletasks()
+        sw = self.root.winfo_screenwidth()
+        sh = self.root.winfo_screenheight()
+        margin_x, margin_y = 48, 96  # 테두리·작업 표시줄 여유
+
+        max_w = max(400, sw - margin_x)
+        max_h = max(400, sh - margin_y)
+
+        w = min(MAIN_WINDOW_DEFAULT_W, max_w)
+        h = min(MAIN_WINDOW_DEFAULT_H, max_h)
+        w = max(w, min(MAIN_WINDOW_MIN_W, max_w))
+        h = max(h, min(MAIN_WINDOW_MIN_H, max_h))
+        w = min(w, max_w)
+        h = min(h, max_h)
+
+        x = max(0, (sw - w) // 2)
+        y = max(0, (sh - h) // 2)
+        self.root.geometry(f"{w}x{h}+{x}+{y}")
+
+        min_w = min(max_w, max(800, min(MAIN_WINDOW_MIN_W, max_w)))
+        min_h = min(max_h, max(560, min(MAIN_WINDOW_MIN_H, max_h)))
+        self.root.minsize(min_w, min_h)
     
     # =====================================
     # Recording toggle method
@@ -671,12 +727,15 @@ class App:
     
     def update_plot(self):
         # EEG Channel 1 (subplot 0)
-        t = np.arange(len(data_buffer["eeg1"])) / EEG_SAMPLE_RATE
-        if len(t) > EEG_MAX_PLOT_POINTS:
+        # BLE 콜백이 다른 스레드에서 버퍼를 갱신하므로, 길이를 두 번 읽으면 t/y 불일치 발생 가능 → 한 번에 스냅샷
+        eeg1_raw = np.asarray(data_buffer["eeg1"], dtype=float)
+        n_eeg1 = eeg1_raw.size
+        t = np.arange(n_eeg1, dtype=float) / EEG_SAMPLE_RATE
+        if n_eeg1 > EEG_MAX_PLOT_POINTS:
             t = t[-EEG_MAX_PLOT_POINTS:]
-            eeg1 = np.array(data_buffer["eeg1"])[-EEG_MAX_PLOT_POINTS:]
+            eeg1 = eeg1_raw[-EEG_MAX_PLOT_POINTS:]
         else:
-            eeg1 = np.array(data_buffer["eeg1"])
+            eeg1 = eeg1_raw
         if len(t) > 0:
             if filter_notch_enabled:
                 eeg1 = apply_notch_filter(eeg1, EEG_SAMPLE_RATE, 60.0,40.0)
@@ -688,12 +747,14 @@ class App:
             self.axs[0].set_title("EEG Channel 1 " + ("(Filtered)" if (filter_notch_enabled or filter_bandpass_enabled) else ""))
         
         # EEG Channel 2 (subplot 1)
-        t2 = np.arange(len(data_buffer["eeg2"])) / EEG_SAMPLE_RATE
-        if len(t2) > EEG_MAX_PLOT_POINTS:
+        eeg2_raw = np.asarray(data_buffer["eeg2"], dtype=float)
+        n_eeg2 = eeg2_raw.size
+        t2 = np.arange(n_eeg2, dtype=float) / EEG_SAMPLE_RATE
+        if n_eeg2 > EEG_MAX_PLOT_POINTS:
             t2 = t2[-EEG_MAX_PLOT_POINTS:]
-            eeg2 = np.array(data_buffer["eeg2"])[-EEG_MAX_PLOT_POINTS:]
+            eeg2 = eeg2_raw[-EEG_MAX_PLOT_POINTS:]
         else:
-            eeg2 = np.array(data_buffer["eeg2"])
+            eeg2 = eeg2_raw
         if len(t2) > 0:
             if filter_notch_enabled:
                 eeg2 = apply_notch_filter(eeg2, EEG_SAMPLE_RATE, 60.0,40.0)
@@ -705,12 +766,14 @@ class App:
             self.axs[1].set_title("EEG Channel 2 " + ("(Filtered)" if (filter_notch_enabled or filter_bandpass_enabled) else ""))
         
         # PPG Data (subplot 2)
-        t_ppg = np.arange(len(data_buffer["ppg"])) / 50
-        if len(t_ppg) > PPG_MAX_PLOT_POINTS:
+        ppg_raw = np.asarray(data_buffer["ppg"], dtype=float)
+        n_ppg = ppg_raw.size
+        t_ppg = np.arange(n_ppg, dtype=float) / 50
+        if n_ppg > PPG_MAX_PLOT_POINTS:
             t_ppg = t_ppg[-PPG_MAX_PLOT_POINTS:]
-            ppg = np.array(data_buffer["ppg"])[-PPG_MAX_PLOT_POINTS:]
+            ppg = ppg_raw[-PPG_MAX_PLOT_POINTS:]
         else:
-            ppg = np.array(data_buffer["ppg"])
+            ppg = ppg_raw
         if len(t_ppg) > 0:
             self.line_ppg.set_data(t_ppg, ppg)
             self.axs[2].relim()
@@ -718,16 +781,25 @@ class App:
             self.axs[2].set_title("PPG Data")
         
         # Accelerometer Data (subplot 3)
-        t_acc = np.arange(len(data_buffer["acc_x"])) / ACC_SAMPLE_RATE
-        if len(t_acc) > ACC_MAX_PLOT_POINTS:
-            t_acc = t_acc[-ACC_MAX_PLOT_POINTS:]
-            acc_x = np.array(data_buffer["acc_x"])[-ACC_MAX_PLOT_POINTS:]
-            acc_y = np.array(data_buffer["acc_y"])[-ACC_MAX_PLOT_POINTS:]
-            acc_z = np.array(data_buffer["acc_z"])[-ACC_MAX_PLOT_POINTS:]
+        acc_x_raw = np.asarray(data_buffer["acc_x"], dtype=float)
+        acc_y_raw = np.asarray(data_buffer["acc_y"], dtype=float)
+        acc_z_raw = np.asarray(data_buffer["acc_z"], dtype=float)
+        n_acc = min(acc_x_raw.size, acc_y_raw.size, acc_z_raw.size)
+        if n_acc == 0:
+            t_acc = np.array([], dtype=float)
+            acc_x = acc_y = acc_z = np.array([], dtype=float)
         else:
-            acc_x = np.array(data_buffer["acc_x"])
-            acc_y = np.array(data_buffer["acc_y"])
-            acc_z = np.array(data_buffer["acc_z"])
+            acc_x_raw = acc_x_raw[:n_acc]
+            acc_y_raw = acc_y_raw[:n_acc]
+            acc_z_raw = acc_z_raw[:n_acc]
+            t_acc = np.arange(n_acc, dtype=float) / ACC_SAMPLE_RATE
+            if n_acc > ACC_MAX_PLOT_POINTS:
+                t_acc = t_acc[-ACC_MAX_PLOT_POINTS:]
+                acc_x = acc_x_raw[-ACC_MAX_PLOT_POINTS:]
+                acc_y = acc_y_raw[-ACC_MAX_PLOT_POINTS:]
+                acc_z = acc_z_raw[-ACC_MAX_PLOT_POINTS:]
+            else:
+                acc_x, acc_y, acc_z = acc_x_raw, acc_y_raw, acc_z_raw
         if len(t_acc) > 0:
             self.line_acc_x.set_data(t_acc, acc_x)
             self.line_acc_y.set_data(t_acc, acc_y)
@@ -790,6 +862,12 @@ class App:
     def on_filter_changed(self):
         self.add_message(f"LXB filter {'enabled' if self.lxb_filter_var.get() else 'disabled'}")
         self.rescan_ble()
+
+    def on_bpm_calc_toggle(self):
+        enabled = self.bpm_calc_enabled_var.get()
+        if not enabled:
+            self.bpm_label.config(text="BPM: --")
+        self.add_message(f"BPM calculation {'enabled' if enabled else 'disabled'}")
 
     # 새로운 메시지를 추가하고 자동 스크롤하는 함수
     def add_message(self, message):
@@ -881,6 +959,12 @@ class App:
         # print("update_bpm called")
         if disconnect_requested or not self.ppg_running:
             data_buffer["ppg"].clear()
+            return
+
+        if not self.bpm_calc_enabled_var.get():
+            self.bpm_label.config(text="BPM: --")
+            if not disconnect_requested:
+                self.root.after(1000, self.update_bpm)
             return
         
         try:

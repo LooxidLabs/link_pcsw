@@ -30,4 +30,3 @@ if errorlevel 1 (
 )
 
 python ".vscode\main.py"
-pause

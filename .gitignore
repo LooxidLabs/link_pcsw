@@ -42,8 +42,9 @@ ENV/
 ehthumbs.db
 Thumbs.db
 
-# PyInstaller
+# PyInstaller / Windows release package output
 *.spec
+release/
 
 # Large files (선택사항 - 필요시 주석 해제)
 # *.xlsx

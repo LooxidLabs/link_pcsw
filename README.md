@@ -57,6 +57,21 @@ Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 �
   python .vscode/main.py
   ```
 
+## Windows 배포판 빌드 (Win10/11)
+
+Python이 설치된 Windows에서 아래 배치 파일을 실행하면, 배포 가능한 실행 폴더를 생성합니다.
+
+```cmd
+build_windows_release.bat
+```
+
+생성 결과:
+
+- `release\windows\LINKBAND_PC_SW\` : 실행 파일 및 런타임 파일
+- `release\windows\run_app.bat` : 최종 사용자 실행용 배치 파일
+
+배포 시에는 `release\windows` 폴더 전체를 전달하면 됩니다.
+
 ## Update Notes
 ### 2025-05-14
 1. 처음 커밋, MAC OS 개발
@@ -77,3 +92,11 @@ Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 �
 4. `main.py`에서 `"BLE connection error:{e}"` → `f"BLE connection error: {e}"` 로 수정해 예외 메시지가 로그에 출력되도록 함
 5. 디바이스 선택 시 `split(":")[-1]`로 인해 주소 일부만 전달되던 문제 수정 — `split(":", 1)[1].strip()`으로 전체 주소 사용
 6. 시작/종료 반복 클릭 시 토글로 인해 한 번 켜짐/한 번 꺼짐이 반복되던 현상 수정
+
+### 2026-04-14
+1. PPG 기반 BPM 계산을 사용자가 켜고 끌 수 있도록 **「BPM 계산」체크박스** 추가 (기본값: 꺼짐). BPM 라벨 옆에 배치.
+2. `run_app.bat` 정상 종료 후 CMD가 멈추지 않도록 **마지막 `pause` 제거** (오류 시 `pause`는 유지).
+3. Windows 10/11 **배포판 빌드** — `build_windows_release.bat` 추가(PyInstaller onedir), 산출물 `release\windows\` 및 사용자용 `run_app.bat` 생성.
+4. 배포 exe에서 `raw_data` 저장 경로가 exe 폴더 기준이 되도록 **`sys.frozen` 분기**로 `RAW_DIR` 보정.
+5. 시작 시 UI가 잘리지 않도록 **기본 창 크기(1536×864 논리 픽셀)·최소 크기·화면 맞춤·중앙 배치** 적용, 메인 그래프 **8×8 인치 @100dpi**로 조정.
+6. 실시간 플롯에서 BLE 스레드와 경쟁할 때 `t`와 신호 길이가 어긋나던 문제 수정 — **`update_plot`에서 버퍼 스냅샷** 후 축 생성, 가속도계는 x/y/z **최소 길이**로 정렬.
