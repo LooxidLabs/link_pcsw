@@ -86,6 +86,31 @@ ACC_MAX_PLOT_POINTS = 240
 PPG_MAX_PLOT_POINTS = 240
 EEG_MAX_PLOT_POINTS = 1250
 
+# 스캔 결과 리스트에 표시할 최대 디바이스 수 (신호 강도 상위·자동 테스트 우선 연결)
+MAX_SCAN_LIST_DEVICES = 5
+
+# 디버그: 터미널(stderr) 출력만 사용. 끄려면 환경변수 LINK_PCSW_DEBUG=0
+def _debug_enabled() -> bool:
+    return os.environ.get("LINK_PCSW_DEBUG", "1").strip() not in ("0", "false", "False", "no", "NO")
+
+
+def debug_log(msg: str) -> None:
+    if not _debug_enabled():
+        return
+    line = f"[DEBUG {time.strftime('%H:%M:%S')}] {msg}"
+    print(line, file=sys.stderr, flush=True)
+
+# 블루투스 스캔: 워커 스레드 → 큐 → 메인 스레드만 Tk/GUI 업데이트 (스레드에서 Tk 접근 금지)
+_ble_scan_queue: queue.Queue = queue.Queue()
+
+
+def _scan_ble_async_worker(lxb_filter: bool) -> None:
+    try:
+        raw = asyncio.run(scan_ble_devices(lxb_filter))
+        _ble_scan_queue.put(("ok", list(raw)))
+    except BaseException as e:
+        _ble_scan_queue.put(("err", e))
+
 # 레코딩 관련 전역 변수 (채널별) 추가 ---
 recording = False
 eeg_file = None
@@ -213,6 +238,13 @@ def battery_callback(sender, data):
     battery_level = int.from_bytes(data, byteorder='little')
     global_main_root.after(0, lambda lvl=battery_level: global_app.battery_info_label.config(text=f"Battery Level: {lvl}%"))
 
+
+def _schedule_battery_label(level: int):
+    """메인 스레드에서 배터리 라벨 갱신"""
+    if global_main_root is None or global_app is None:
+        return
+    global_main_root.after(0, lambda lvl=level: global_app.battery_info_label.config(text=f"Battery Level: {lvl}%"))
+
 def eeg_notify_callback(sender, data):
     #print("eeg_notify_callback")
     global eeg_writer
@@ -290,22 +322,49 @@ async def connect_ble(device_address):
     global disconnect_requested, global_ble_client, global_ble_loop
     client = BleakClient(device_address)
     try:
+        debug_log(f"connect_ble: connecting to {device_address!r}")
         await client.connect()
         global_ble_client = client
         global_ble_loop = asyncio.get_running_loop()
+        debug_log(f"connect_ble: GATT 세션 시작됨 ({device_address!r})")
         #print("BLE device connected successfully")
         global_app.add_message("BLE device connected successfully")
+        # 연결 직후 표준 Battery Level(0x2A19) GATT Read — Notify 없이 즉시 % 표시
+        try:
+            bat_data = await client.read_gatt_char(BATTERY_CHAR_UUID)
+            battery_level = int.from_bytes(bat_data, byteorder="little")
+            _schedule_battery_label(battery_level)
+        except Exception as read_err:
+            def _battery_read_fail():
+                global_app.battery_info_label.config(text="Battery Info: N/A")
+                global_app.add_message(f"Battery read on connect: {read_err}")
+
+            if global_main_root and global_app:
+                global_main_root.after(0, _battery_read_fail)
         disconnect_requested = False
+        # 자동 테스트: 연결 완료 후 메인 스레드에서 Start All Sensors 실행
+        if global_app is not None and getattr(global_app, "_auto_test_want_start_sensors", False):
+            global_app._auto_test_want_start_sensors = False
+            if global_main_root is not None:
+                global_main_root.after(500, global_app.start_all_sensors)
+                global_app.add_message("[Auto test] Start All Sensors 예약 (0.5초 후)")
         while not disconnect_requested:
             await asyncio.sleep(1)
     except Exception as e:
         #print("BLE connection error:", e)
+        debug_log(f"connect_ble: 실패 — {type(e).__name__}: {e}")
         global_app.add_message(f"BLE connection error: {e}")
+        if global_app is not None:
+            global_app._auto_test_want_start_sensors = False
     finally:
         await client.disconnect()
         global_ble_client = None
         #print("BLE device disconnected")
         global_app.add_message("BLE device disconnected")
+        if global_main_root and global_app:
+            global_main_root.after(
+                0, lambda: global_app.battery_info_label.config(text="Battery Info: N/A")
+            )
 
 def ble_thread_main(device_address):
     asyncio.run(connect_ble(device_address))
@@ -494,12 +553,45 @@ class App:
         
         # LXB 필터링 체크박스 추가
         filter_frame = tk.Frame(left_frame)
-        filter_frame.pack(pady=5)
+        filter_frame.pack(pady=5, fill=tk.X)
+        filter_inner = tk.Frame(filter_frame)
+        filter_inner.pack(anchor="center")
         self.lxb_filter_var = tk.BooleanVar(value=True)
-        self.lxb_filter_checkbox = tk.Checkbutton(filter_frame, text="Show LXB devices only", 
-                                                 variable=self.lxb_filter_var, 
-                                                 command=self.on_filter_changed)
-        self.lxb_filter_checkbox.pack(side=tk.LEFT)
+        self.lxb_filter_checkbox = tk.Checkbutton(
+            filter_inner,
+            text="Show LXB devices only",
+            variable=self.lxb_filter_var,
+            command=self.on_filter_changed,
+        )
+        self.lxb_filter_checkbox.pack()
+
+        self._auto_test_after_scan_connect = False
+        self._auto_test_want_start_sensors = False
+        self._auto_test_scan_busy = False
+        auto_test_row = tk.Frame(left_frame)
+        auto_test_row.pack(pady=5, fill=tk.X)
+        auto_inner = tk.Frame(auto_test_row)
+        auto_inner.pack(anchor="center")
+        self.auto_test_var = tk.BooleanVar(value=False)
+        tk.Checkbutton(
+            auto_inner,
+            text="자동 테스트 모드 (키보드 단축키)",
+            variable=self.auto_test_var,
+            command=self._on_auto_test_checkbox,
+        ).pack()
+        tk.Label(
+            auto_inner,
+            justify=tk.CENTER,
+            text=(
+                "C → 스캔 후 자동 연결 및 Start All Sensors\n"
+                "D → 연결 종료\n"
+                "(한글 입력 상태: ㅊ=C, ㅇ=D)\n"
+                "(그래프 영역을 한 번 클릭한 뒤 키를 누르거나, 왼쪽 목록에 포커스를 주세요.)"
+            ),
+            fg="gray",
+            font=("Arial", 9),
+        ).pack()
+        self.root.bind_all("<KeyPress>", self._auto_test_keypress_router)
         
         # Battery information label
         self.battery_info_label = tk.Label(left_frame, text="Battery Info: N/A")
@@ -621,9 +713,10 @@ class App:
         
         self.canvas = FigureCanvasTkAgg(self.fig, master=right_frame)
         self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # 그래프에 포커스가 있을 때는 Tk bind_all만으로 C/D가 안 들어올 수 있음 → matplotlib 키 이벤트로도 처리
+        self.fig.canvas.mpl_connect("key_press_event", self._mpl_key_auto_test)
 
         self._apply_main_window_geometry()
-
         self.update_plot()
 
     def _apply_main_window_geometry(self):
@@ -650,6 +743,48 @@ class App:
         min_w = min(max_w, max(800, min(MAIN_WINDOW_MIN_W, max_w)))
         min_h = min(max_h, max(560, min(MAIN_WINDOW_MIN_H, max_h)))
         self.root.minsize(min_w, min_h)
+
+    def _mpl_key_auto_test(self, event) -> None:
+        """matplotlib 캔버스 포커스 상태에서의 C/D (Tk bind_all과 보완)"""
+        if not getattr(self, "auto_test_var", None) or not self.auto_test_var.get():
+            return
+        key_raw = getattr(event, "key", "") or ""
+        debug_log(f"mpl key_press_event: key={key_raw!r}")
+        if "ctrl" in key_raw.lower():
+            debug_log("mpl key 무시: Ctrl 조합")
+            return
+        k = self._normalize_auto_test_key(key_raw)
+        if k == "c":
+            self.root.after(0, self._auto_test_key_c_pipeline)
+        elif k == "d":
+            self.root.after(0, self._auto_test_key_d_disconnect)
+
+    def _normalize_auto_test_key(self, key_raw: str):
+        """영문/한글 입력 상태 모두에서 자동테스트 키를 동일 처리."""
+        if not key_raw:
+            return None
+        # matplotlib key는 'ctrl+c' 같은 형태가 올 수 있어 마지막 토큰만 사용
+        k = key_raw.split("+")[-1].strip().lower()
+        mapping = {
+            "c": "c",
+            "d": "d",
+            "ㅊ": "c",  # 한글 두벌식 C 위치
+            "ㅇ": "d",  # 한글 두벌식 D 위치
+        }
+        return mapping.get(k)
+
+    def _auto_test_keypress_router(self, event=None):
+        """Tk 키 입력 라우터: c/d + 한글(ㅊ/ㅇ) 모두 지원."""
+        if not self.auto_test_var.get():
+            return
+        key_char = getattr(event, "char", "") or ""
+        key_sym = getattr(event, "keysym", "") or ""
+        key_raw = key_char if key_char else key_sym
+        k = self._normalize_auto_test_key(key_raw)
+        if k == "c":
+            return self._auto_test_key_c_pipeline(event)
+        if k == "d":
+            return self._auto_test_key_d_disconnect(event)
     
     # =====================================
     # Recording toggle method
@@ -811,12 +946,112 @@ class App:
         self.canvas.draw_idle()
         self.root.after(200, self.update_plot)
     
+    def _on_auto_test_checkbox(self):
+        if not self.auto_test_var.get():
+            debug_log("자동 테스트 체크 해제 → _auto_test_after_scan_connect 초기화")
+            self._auto_test_after_scan_connect = False
+
+    def _auto_test_key_c_pipeline(self, event=None):
+        debug_log(
+            f"_auto_test_key_c_pipeline: auto_mode={self.auto_test_var.get()} "
+            f"ble_client={'set' if global_ble_client else 'None'} "
+            f"after_scan_flag={self._auto_test_after_scan_connect} scan_busy={self._auto_test_scan_busy}"
+        )
+        if not self.auto_test_var.get():
+            debug_log("C 키 무시: 자동 테스트 모드 꺼짐")
+            return
+        if global_ble_client is not None:
+            self.add_message("[Auto test] C: 이미 연결됨 → D 로 연결 종료 후 재시도")
+            return "break"
+        self.add_message("[Auto test] C: 스캔 → 목록 최우선(최신·강신호) 연결 → Start All Sensors")
+        self._auto_test_after_scan_connect = True
+        debug_log(f"C 파이프라인: _auto_test_after_scan_connect=True, rescan_ble 호출")
+        self.rescan_ble()
+        return "break"
+
+    def _auto_test_key_d_disconnect(self, event=None):
+        debug_log(f"_auto_test_key_d_disconnect: auto_mode={self.auto_test_var.get()} ble={global_ble_client is not None}")
+        if not self.auto_test_var.get():
+            return
+        if global_ble_client is None:
+            self.add_message("[Auto test] D: 연결된 디바이스 없음")
+            return "break"
+        self.add_message("[Auto test] D: 연결 종료")
+        self.disconnect_device()
+        return "break"
+
     def update_device_list(self, devices):
+        """RSSI 높은 순(없으면 뒤)으로 정렬 후 최대 MAX_SCAN_LIST_DEVICES개만 목록 표시."""
+
+        def _sort_key(d):
+            r = getattr(d, "rssi", None)
+            # RSSI 알 수 없으면 -999로 두어 목록 후순위 (OS에 따라 없을 수 있음)
+            return (r is not None, r if r is not None else -999)
+
+        debug_log(
+            f"update_device_list: 입력 {len(devices)}대, auto_mode={self.auto_test_var.get()} "
+            f"after_scan_connect={self._auto_test_after_scan_connect}"
+        )
+        devices = sorted(devices, key=_sort_key, reverse=True)[:MAX_SCAN_LIST_DEVICES]
         self.listbox.delete(0, tk.END)
         for dev in devices:
             self.listbox.insert(tk.END, f"{dev.name}: {dev.address}")
-        self.add_message(f"{len(devices)} devices found")
+        self.add_message(f"{len(devices)} devices found (표시 최대 {MAX_SCAN_LIST_DEVICES}대)")
+
+        if self.auto_test_var.get() and self._auto_test_after_scan_connect:
+            debug_log("자동 테스트: 스캔 완료 → 자동 연결 분기 진입")
+            self._auto_test_after_scan_connect = False
+            if global_ble_client is not None:
+                self.add_message("[Auto test] 이미 연결됨 — 자동 연결 생략")
+                debug_log("자동 연결 생략: global_ble_client 이미 존재")
+                return
+            if not devices:
+                self.add_message("[Auto test] 디바이스 없음 — 연결 생략")
+                debug_log("자동 연결 생략: 표시할 디바이스 0대")
+                return
+            dev0 = devices[0]
+            debug_log(f"자동 연결 대상: {dev0.name!r} / {dev0.address!r} RSSI={getattr(dev0, 'rssi', None)!r}")
+            self.listbox.selection_clear(0, tk.END)
+            self.listbox.selection_set(0)
+            self.listbox.activate(0)
+            self._auto_test_want_start_sensors = True
+            self.connect_device_with_address(
+                dev0.address, f"[Auto test] {dev0.name}: {dev0.address} 연결 중..."
+            )
     
+    def connect_device_with_address(self, device_address: str, log_message: str):
+        debug_log(f"connect_device_with_address: {device_address!r} (ble={'set' if global_ble_client else 'None'})")
+        if global_ble_client is not None:
+            self.add_message("이미 연결됨")
+            debug_log("connect_device_with_address: 중단 (이미 연결됨)")
+            return
+        threading.Thread(target=ble_thread_main, args=(device_address,), daemon=True).start()
+        self.add_message(log_message)
+
+    def start_ble_scan_startup(self) -> None:
+        """앱 기동 시 첫 스캔 (메인 스레드에서만 호출)"""
+        self._auto_test_scan_busy = True
+        self.add_message("Scan BLE devices...")
+        lxb = bool(self.lxb_filter_var.get())
+        debug_log(f"start_ble_scan_startup: lxb_only={lxb}")
+        threading.Thread(target=_scan_ble_async_worker, args=(lxb,), daemon=True).start()
+        self.root.after(50, self._poll_ble_scan_queue)
+
+    def _poll_ble_scan_queue(self) -> None:
+        try:
+            kind, payload = _ble_scan_queue.get_nowait()
+        except queue.Empty:
+            if getattr(self, "_auto_test_scan_busy", False):
+                self.root.after(50, self._poll_ble_scan_queue)
+            return
+        debug_log(f"_poll_ble_scan_queue: 수신 kind={kind!r}")
+        self._auto_test_scan_busy = False
+        if kind == "ok":
+            self.update_device_list(payload)
+        else:
+            self.add_message(f"Scan failed: {payload}")
+            debug_log(f"스캔 실패: {payload!r}")
+
     def connect_device(self):
         try:
             selected = self.listbox.get(self.listbox.curselection())
@@ -825,8 +1060,7 @@ class App:
             return
         # "Name: FC:08:70:EA:EC:98" → 첫 번째 ':' 기준으로만 분리해 주소 전체 추출
         device_address = selected.split(":", 1)[1].strip()
-        threading.Thread(target=ble_thread_main, args=(device_address,), daemon=True).start()
-        self.add_message(f"{selected} Connecting...")
+        self.connect_device_with_address(device_address, f"{selected} Connecting...")
     
     def disconnect_device(self):
         global disconnect_requested
@@ -844,8 +1078,16 @@ class App:
         self.ppg_button.config(text="PPG Start")
     
     def rescan_ble(self):
+        if getattr(self, "_auto_test_scan_busy", False):
+            debug_log("rescan_ble: 이미 스캔 중 — 중복 요청 무시")
+            return
         self.listbox.delete(0, tk.END)
-        threading.Thread(target=scan_devices_background, args=(self,), daemon=True).start()
+        self._auto_test_scan_busy = True
+        self.add_message("Scan BLE devices...")
+        lxb = bool(self.lxb_filter_var.get())
+        debug_log(f"rescan_ble: lxb_only={lxb}")
+        threading.Thread(target=_scan_ble_async_worker, args=(lxb,), daemon=True).start()
+        self.root.after(50, self._poll_ble_scan_queue)
 
     # 필터 토글 함수 (Notch, Bandpass)
     def toggle_notch(self):
@@ -1071,12 +1313,6 @@ class App:
 # =====================================
 # BLE Device Scan in Background
 # =====================================
-def scan_devices_background(app):
-    global_app.add_message("Scan BLE devices...")
-    devices = asyncio.run(scan_ble_devices(app.lxb_filter_var.get()))
-    app.root.after(0, lambda: app.update_device_list(devices))
-
-# =====================================
 # Main Function
 # =====================================
 def main():
@@ -1085,7 +1321,7 @@ def main():
     global_main_root = root
     app = App(root)
     global_app = app
-    threading.Thread(target=scan_devices_background, args=(app,), daemon=True).start()
+    app.start_ble_scan_startup()
     root.mainloop()
 
 if __name__ == "__main__":
