@@ -29,4 +29,4 @@ if errorlevel 1 (
     )
 )
 
-python ".vscode\main.py"
+python "app\main.py"

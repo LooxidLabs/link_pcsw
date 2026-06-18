@@ -5,7 +5,7 @@ REM Build Windows 10/11 distributable (PyInstaller onedir)
 cd /d "%~dp0"
 
 set "APP_NAME=LINKBAND_PC_SW"
-set "ENTRY_SCRIPT=.vscode\main.py"
+set "ENTRY_SCRIPT=app\main.py"
 set "BUILD_VENV=.venv-build"
 set "RELEASE_DIR=release\windows"
 set "DIST_DIR=dist\%APP_NAME%"

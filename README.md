@@ -43,7 +43,7 @@
   ```cmd
   cd C:\path\to\link_pcsw
   .venv\Scripts\activate
-  python .vscode\main.py
+  python app\main.py
   ```
 
 ### macOS
@@ -54,7 +54,7 @@ Tkinter GUI는 **Cursor IDE 내부 터미널**에서 실행하면 macOS에서 �
   ```bash
   cd /path/to/link_pcsw
   source .venv/bin/activate
-  python .vscode/main.py
+  python app/main.py
   ```
 
 ## Windows 배포판 빌드 (Win10/11)
