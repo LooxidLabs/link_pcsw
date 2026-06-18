@@ -46,9 +46,10 @@ Thumbs.db
 *.spec
 release/
 
-# Large files (선택사항 - 필요시 주석 해제)
+# Large files / local runtime data
 # *.xlsx
-# raw_data/
+raw_data/
+.cache/
 
 # Logs
 *.log
