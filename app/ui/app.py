@@ -19,6 +19,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 matplotlib.use("TkAgg")
 
 from app import constants, state
+from app import version
 from app.ble import client as ble_client
 from app.ble import services as ble_services
 from app.signal import filters as signal_filters
@@ -33,7 +34,7 @@ toggle_ppg = ble_services.toggle_ppg
 class App:
     def __init__(self, root):
         self.root = root
-        root.title("BLE Device and Service Control")
+        root.title(version.window_title())
 
         # 프로토콜 핸들러 등록: X 클릭 시 on_closing 호출
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)

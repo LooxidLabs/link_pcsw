@@ -1,7 +1,29 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW. **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.0**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.0` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+
+## 프로젝트 구조
+
+```
+link_pcsw/
+  app/
+    main.py              # 앱 엔트리 (Tk mainloop)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.0)
+    constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
+    state.py             # 런타임 상태, UI 콜백 큐
+    ble/                 # BLE 스캔·연결·서비스 토글·notify 콜백
+    signal/              # 필터, EEG lead-off 디코딩
+    ui/                  # Tkinter GUI, lead-off LED 패널
+  docs/
+    eeg-raw-data-format.md   # EEG 패킷·lead-off 비트맵 문서
+  run_app.bat            # Windows 실행
+  run_app.command        # macOS 실행
+  build_windows_release.bat
+  raw_data/              # 레코딩 CSV (실행 시 생성)
+```
 
 ## Windows: 설치 절차 (최초 1회)
 
@@ -90,6 +112,22 @@ build_windows_release.bat
 - 자동 테스트 관련 디버그는 GUI Message Log가 아니라 터미널(stderr)로 출력됩니다.
 - 끄려면 환경변수 `LINK_PCSW_DEBUG=0`으로 실행하세요.
 
+## UI 기능 요약
+
+### Service Control
+- Battery / Accelerometer / PPG / EEG Write / EEG Notify / Bandpass / Notch / Start·Stop All Sensors
+- 버튼은 **2열 그리드**로 배치되어 가로 폭을 균일하게 유지합니다.
+
+### EEG Lead-Off
+- EEG Notify 수신 시 **CH1 + / CH1 − / CH2 + / CH2 −** 4개 LED 표시 (그래프 영역 상단)
+- **초록**: 전극 접촉(lead-on) · **빨강**: lead-off · **회색**: 데이터 없음
+- 패킷 포맷 및 비트맵: [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md)
+
+### 기타
+- **Show LXB devices only**: LXB 이름 디바이스만 스캔 목록에 표시 (기본: 켜짐)
+- **EEG 로우데이터 출력**: 체크 시 EEG raw 패킷/샘플을 터미널에 출력 (기본: 꺼짐)
+- **Message Log**: 왼쪽 하단, 창 높이에 맞춰 확장되는 스크롤 로그
+
 ## Update Notes
 ### 2025-05-14
 1. 처음 커밋, MAC OS 개발
@@ -125,3 +163,14 @@ build_windows_release.bat
 3. 스캔 결과 처리 안정화: 스캔 워커 스레드와 GUI 스레드를 큐로 분리하고, 스캔 중복 실행 방지 로직 적용.
 4. 자동 테스트 디버그 로그를 GUI Message Log가 아닌 터미널(stderr) 출력으로 변경.
 5. 연결 직후 표준 Battery Level(0x2A19)를 즉시 읽어 배터리 라벨을 갱신하도록 개선.
+
+### 2026-06-18
+1. **코드 리팩토링** — 단일 `main.py`를 `app/` 패키지로 분리 (`ble/`, `ui/`, `signal/`, `state.py`, `constants.py`). 엔트리는 `app/main.py`, `.vscode/main.py`는 호환 래퍼.
+2. **EEG Lead-Off UI** — 패킷 lead-off 바이트를 4전극(CH1/CH2 P·N) LED로 표시. 그래프 상단, 패널 너비 600px.
+3. **UI 레이아웃** — Service Control 2열·`LabelFrame` 테두리, Message Log 세로 확장, Lead-Off 패널을 왼쪽에서 그래프 영역으로 이동.
+4. **EEG 로우데이터 출력** 체크박스 추가 (LXB 필터 옆, 기본 꺼짐). BLE 스레드 안전을 위해 `BooleanVar` 대신 플래그 사용.
+5. **스레드 안전 UI** — BLE/백그라운드 스레드에서 Tk `after()` 직접 호출 제거, `_ui_callback_queue` + 메인 스레드 폴링으로 변경 (`Stop All Sensors` 시 GIL 크래시 방지).
+6. **종료 처리** — 창 닫기 시 예약된 `after` 콜백 취소, `shutting_down` 가드로 `invalid command name` 오류 완화.
+7. **문서** — [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md) 추가 (179B 패킷, lead-off 비트맵, µV 변환).
+8. **실행 스크립트** — `run_app.bat`, `run_app.command`, `build_windows_release.bat` 엔트리를 `app/main.py` 기준으로 정리. macOS `run_app.command`에 matplotlib/fontconfig 캐시 경로 고정.
+9. **소프트웨어 버전 v2.0** — `app/version.py` 추가, 창 제목에 `LINKBAND PC SW v2.0` 표시.
