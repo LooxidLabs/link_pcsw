@@ -91,6 +91,7 @@ def toggle_eeg_notify(self):
             self.eeg_notify_running = True
             self.eeg_notify_button.config(text="EEG Notify Stop")            
             self.add_message("EEG Notify Running")
+            self.refresh_eeg_gain_controls()
         else:
             future = asyncio.run_coroutine_threadsafe(
                 state.global_ble_client.stop_notify(constants.EEG_NOTIFY_CHAR_UUID),
@@ -100,6 +101,7 @@ def toggle_eeg_notify(self):
             self.eeg_notify_button.config(text="EEG Notify Start")
             self.add_message("EEG Notify Stopped")
             state.reset_eeg_lead_off()
+            self.refresh_eeg_gain_controls()
     except Exception as e:
         self.add_message(f"EEG Notify error: {e}")
 

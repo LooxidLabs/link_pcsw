@@ -1,9 +1,11 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.0**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.1**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.0` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.1` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+
+사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
 ## 프로젝트 구조
 
@@ -11,18 +13,20 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.0)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.1)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
+    user_settings.py     # user_settings.json 로드/저장
     ble/                 # BLE 스캔·연결·서비스 토글·notify 콜백
-    signal/              # 필터, EEG lead-off 디코딩
-    ui/                  # Tkinter GUI, lead-off LED 패널
+    signal/              # 필터, EEG lead-off 디코딩, µV 변환(eeg_scale)
+    ui/                  # Tkinter GUI, lead-off·PGA gain 패널
   docs/
     eeg-raw-data-format.md   # EEG 패킷·lead-off 비트맵 문서
   run_app.bat            # Windows 실행
   run_app.command        # macOS 실행
   build_windows_release.bat
   raw_data/              # 레코딩 CSV (실행 시 생성)
+  user_settings.json     # 사용자 UI 설정 (실행·변경 시 생성, Git 제외)
 ```
 
 ## Windows: 설치 절차 (최초 1회)
@@ -118,14 +122,18 @@ build_windows_release.bat
 - Battery / Accelerometer / PPG / EEG Write / EEG Notify / Bandpass / Notch / Start·Stop All Sensors
 - 버튼은 **2열 그리드**로 배치되어 가로 폭을 균일하게 유지합니다.
 
-### EEG Lead-Off
-- EEG Notify 수신 시 **CH1 + / CH1 − / CH2 + / CH2 −** 4개 LED 표시 (그래프 영역 상단)
-- **초록**: 전극 접촉(lead-on) · **빨강**: lead-off · **회색**: 데이터 없음
-- 패킷 포맷 및 비트맵: [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md)
+### EEG Lead-Off · PGA Gain
+- **Lead-Off**: EEG Notify 수신 시 **CH1 + / CH1 − / CH2 + / CH2 −** 4개 LED (그래프 위, Lead-Off 패널)
+- **PGA Gain**: **8 / 12** 선택 — 디바이스 Gain에 맞춰 µV 변환 (`app/signal/eeg_scale.py`)
+- Lead-Off와 Gain 패널은 **그래프 상단 한 줄(좌우 배치)**
+- Gain 변경: EEG Notify·레코딩 **중에는 불가**
+- **초록**: 전극 접촉 · **빨강**: lead-off · **회색**: 데이터 없음
+- 패킷 포맷: [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md)
 
 ### 기타
-- **Show LXB devices only**: LXB 이름 디바이스만 스캔 목록에 표시 (기본: 켜짐)
-- **EEG 로우데이터 출력**: 체크 시 EEG raw 패킷/샘플을 터미널에 출력 (기본: 꺼짐)
+- **Show LXB devices only**: LXB 이름 디바이스만 스캔 목록에 표시 (기본: 켜짐, **재실행 시 복원**)
+- **EEG 로우데이터 출력**: 체크 시 EEG raw 패킷/샘플을 터미널에 출력 (기본: 꺼짐, **재실행 시 복원**)
+- **자동 테스트 모드** / **BPM 계산**: 마지막 설정 **재실행 시 복원**
 - **Message Log**: 왼쪽 하단, 창 높이에 맞춰 확장되는 스크롤 로그
 
 ## Update Notes
@@ -174,3 +182,9 @@ build_windows_release.bat
 7. **문서** — [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md) 추가 (179B 패킷, lead-off 비트맵, µV 변환).
 8. **실행 스크립트** — `run_app.bat`, `run_app.command`, `build_windows_release.bat` 엔트리를 `app/main.py` 기준으로 정리. macOS `run_app.command`에 matplotlib/fontconfig 캐시 경로 고정.
 9. **소프트웨어 버전 v2.0** — `app/version.py` 추가, 창 제목에 `LINKBAND PC SW v2.0` 표시.
+
+### 2026-06-19 (v2.1)
+1. **EEG PGA Gain 선택** — Gain 8/12 UI, `raw_to_uv()` 분리(`app/signal/eeg_scale.py`). EEG Notify·레코딩 중 변경 불가.
+2. **Lead-Off + Gain 패널** — 그래프 상단 **좌우 배치** (plot 너비 800px 기준).
+3. **사용자 설정 저장** — `user_settings.json`으로 LXB 필터, 로우데이터 출력, 자동 테스트, BPM 계산, PGA Gain **재실행 시 복원**. 파일 없으면 기본값.
+4. **소프트웨어 버전 v2.1** — 창 제목 `LINKBAND PC SW v2.1`.

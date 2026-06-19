@@ -6,6 +6,8 @@ import time
 import tkinter as tk
 from pathlib import Path
 
+from app import constants
+
 data_buffer = {
     "eeg1": [],
     "eeg2": [],
@@ -22,6 +24,7 @@ disconnect_requested = False
 shutting_down = False
 # BLE 콜백 스레드에서 읽음 — Tk BooleanVar.get()은 메인 스레드 전용이라 별도 플래그 사용
 eeg_raw_print_enabled = False
+eeg_pga_gain: int = constants.EEG_PGA_GAIN_DEFAULT  # BLE 콜백에서 읽음
 
 # Global BLE client and event loop for service control
 global_ble_client = None
@@ -124,6 +127,11 @@ def _run_on_ui_after(delay_ms: int, callback) -> None:
 def clear_data_buffer() -> None:
     for key in data_buffer:
         data_buffer[key].clear()
+
+
+def clear_eeg_data_buffer() -> None:
+    data_buffer["eeg1"].clear()
+    data_buffer["eeg2"].clear()
 
 
 def update_eeg_lead_off(lead_off_raw: int) -> None:

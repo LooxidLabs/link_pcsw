@@ -3,6 +3,7 @@ import time
 
 from app import state
 from app import constants
+from app.signal import eeg_scale
 
 def accelerometer_callback(sender, data):
     # print(f"({len(data)}) ")
@@ -93,8 +94,9 @@ def eeg_notify_callback(sender, data):
             ch2_raw -= 0x1000000
 
         # 전압값(uV)로 변환
-        ch1_uv = ch1_raw * 4.033 / 12 / (2**23 - 1) * 1e6
-        ch2_uv = ch2_raw * 4.033 / 12 / (2**23 - 1) * 1e6
+        gain = state.eeg_pga_gain
+        ch1_uv = eeg_scale.raw_to_uv(ch1_raw, gain)
+        ch2_uv = eeg_scale.raw_to_uv(ch2_raw, gain)
 
         state.data_buffer["eeg1"].append(ch1_uv)
         state.data_buffer["eeg2"].append(ch2_uv)

@@ -50,6 +50,7 @@ release/
 # *.xlsx
 raw_data/
 .cache/
+user_settings.json
 
 # Logs
 *.log

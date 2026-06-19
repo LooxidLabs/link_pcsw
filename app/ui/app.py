@@ -24,6 +24,8 @@ from app.ble import client as ble_client
 from app.ble import services as ble_services
 from app.signal import filters as signal_filters
 from app.ui.lead_off_panel import LeadOffPanel
+from app.ui.eeg_gain_panel import EegGainPanel
+from app import user_settings
 
 toggle_accelerometer = ble_services.toggle_accelerometer
 toggle_battery = ble_services.toggle_battery
@@ -38,6 +40,8 @@ class App:
 
         # 프로토콜 핸들러 등록: X 클릭 시 on_closing 호출
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+
+        saved = user_settings.load_settings()
         
         # Left Frame (Device selection and controls)
         left_frame = tk.Frame(root)
@@ -79,7 +83,7 @@ class App:
         filter_frame.pack(pady=5, fill=tk.X)
         filter_inner = tk.Frame(filter_frame)
         filter_inner.pack(anchor="center")
-        self.lxb_filter_var = tk.BooleanVar(value=True)
+        self.lxb_filter_var = tk.BooleanVar(value=saved["lxb_filter_only"])
         self.lxb_filter_checkbox = tk.Checkbutton(
             filter_inner,
             text="Show LXB devices only",
@@ -88,7 +92,8 @@ class App:
         )
         self.lxb_filter_checkbox.pack(side=tk.LEFT, padx=(0, 12))
 
-        self.eeg_raw_print_var = tk.BooleanVar(value=False)
+        self.eeg_raw_print_var = tk.BooleanVar(value=saved["eeg_raw_print"])
+        state.eeg_raw_print_enabled = saved["eeg_raw_print"]
         self.eeg_raw_print_checkbox = tk.Checkbutton(
             filter_inner,
             text="EEG 로우데이터 출력",
@@ -104,7 +109,7 @@ class App:
         auto_test_row.pack(pady=5, fill=tk.X)
         auto_inner = tk.Frame(auto_test_row)
         auto_inner.pack(anchor="center")
-        self.auto_test_var = tk.BooleanVar(value=False)
+        self.auto_test_var = tk.BooleanVar(value=saved["auto_test_mode"])
         tk.Checkbutton(
             auto_inner,
             text="자동 테스트 모드 (키보드 단축키)",
@@ -206,7 +211,7 @@ class App:
         bpm_frame.pack(pady=5)
         self.bpm_label = tk.Label(bpm_frame, text="BPM: --", font=("Arial", 12))
         self.bpm_label.pack(side=tk.LEFT)
-        self.bpm_calc_enabled_var = tk.BooleanVar(value=False)  # 기본: 비활성화
+        self.bpm_calc_enabled_var = tk.BooleanVar(value=saved["bpm_calc_enabled"])  # 기본: 비활성화
         self.bpm_calc_checkbox = tk.Checkbutton(
             bpm_frame,
             text="BPM 계산",
@@ -245,8 +250,23 @@ class App:
         plot_column = tk.Frame(plot_align)
         plot_column.pack(anchor="n")
 
-        self.lead_off_panel = LeadOffPanel(plot_column)
-        self.lead_off_panel.pack(pady=(0, 8))
+        eeg_top_row = tk.Frame(plot_column, width=constants.MAIN_PLOT_WIDTH_PX)
+        eeg_top_row.pack(pady=(0, 8))
+
+        self.lead_off_panel = LeadOffPanel(
+            eeg_top_row, width=constants.EEG_LEAD_OFF_ROW_WIDTH_PX
+        )
+        self.lead_off_panel.pack(side=tk.LEFT, anchor="n")
+
+        self.eeg_gain_panel = EegGainPanel(
+            eeg_top_row,
+            on_gain_change=self._on_eeg_gain_changed,
+            width=constants.EEG_GAIN_PANEL_WIDTH_PX,
+        )
+        self.eeg_gain_panel.pack(side=tk.LEFT, anchor="n", padx=(constants.EEG_TOP_ROW_GAP_PX, 0))
+        state.eeg_pga_gain = saved["eeg_pga_gain"]
+        self.eeg_gain_panel.set_gain(state.eeg_pga_gain)
+        self.refresh_eeg_gain_controls()
 
         plot_frame = tk.Frame(plot_column)
         plot_frame.pack(fill=tk.BOTH, expand=True)
@@ -414,6 +434,8 @@ class App:
             self.update_record_timer()            # ⏱️ 타이머 시작
             self.add_message(f"Recording started at {now_str}")
             self.add_message(f"Recording started → saved in raw_data/ (prefix: {timestamp_str})")
+            self.add_message(f"EEG PGA Gain (locked): {state.eeg_pga_gain}")
+            self.refresh_eeg_gain_controls()
         else:
             # 레코딩 종료 시각
             now_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -437,7 +459,8 @@ class App:
                 self.add_message(f"⏱️ Total recording duration: {minutes}분 {seconds}초")
             self.record_start_time = None
 
-            self.add_message(f"Recording stopped at {now_str}")            
+            self.add_message(f"Recording stopped at {now_str}")
+            self.refresh_eeg_gain_controls()            
 
     def update_record_timer(self):
         if not self._ui_alive():
@@ -463,12 +486,38 @@ class App:
         else:
             self.lead_off_panel.update_electrodes(state.eeg_lead_off_electrodes)
 
+    def refresh_eeg_gain_controls(self) -> None:
+        """EEG Notify 또는 레코딩 중에는 Gain 변경 불가."""
+        if not hasattr(self, "eeg_gain_panel"):
+            return
+        locked = self.eeg_notify_running or state.recording
+        self.eeg_gain_panel.set_enabled(not locked)
+
+    def _on_eeg_gain_changed(self, gain: int) -> None:
+        if self.eeg_notify_running or state.recording:
+            self.eeg_gain_panel.set_gain(state.eeg_pga_gain)
+            return
+        if gain not in constants.EEG_PGA_GAIN_OPTIONS:
+            return
+        if gain == state.eeg_pga_gain:
+            return
+        state.eeg_pga_gain = gain
+        state.clear_eeg_data_buffer()
+        self.eeg_times.clear()
+        self.add_message(f"EEG PGA Gain → {gain} (µV 스케일 적용, EEG 버퍼 초기화)")
+        self._save_user_settings()
+
+    def _save_user_settings(self) -> None:
+        if not user_settings.save_settings(user_settings.collect_from_app(self)):
+            self.add_message("Warning: user_settings.json 저장 실패")
+
     def reset_lead_off_indicators(self) -> None:
         if not hasattr(self, "lead_off_panel"):
             return
         self.lead_off_panel.reset()
 
     def on_closing(self):
+        self._save_user_settings()
         state.shutting_down = True
         state.disconnect_requested = True
 
@@ -597,6 +646,7 @@ class App:
         if not self.auto_test_var.get():
             state.debug_log("자동 테스트 체크 해제 → _auto_test_after_scan_connect 초기화")
             self._auto_test_after_scan_connect = False
+        self._save_user_settings()
 
     def _auto_test_key_c_pipeline(self, event=None):
         state.debug_log(
@@ -729,6 +779,7 @@ class App:
         self.eeg_notify_button.config(text="EEG Notify Start")
         self.ppg_button.config(text="PPG Start")
         state.reset_eeg_lead_off()
+        self.refresh_eeg_gain_controls()
     
     def rescan_ble(self):
         if getattr(self, "_auto_test_scan_busy", False):
@@ -754,6 +805,7 @@ class App:
     # LXB 필터 변경 시 자동으로 스캔 다시 실행
     def on_filter_changed(self):
         self.add_message(f"LXB filter {'enabled' if self.lxb_filter_var.get() else 'disabled'}")
+        self._save_user_settings()
         self.rescan_ble()
 
     def on_bpm_calc_toggle(self):
@@ -761,12 +813,14 @@ class App:
         if not enabled:
             self.bpm_label.config(text="BPM: --")
         self.add_message(f"BPM calculation {'enabled' if enabled else 'disabled'}")
+        self._save_user_settings()
 
     def on_eeg_raw_print_toggle(self):
         state.eeg_raw_print_enabled = bool(self.eeg_raw_print_var.get())
         self.add_message(
             f"EEG raw data terminal output {'enabled' if state.eeg_raw_print_enabled else 'disabled'}"
         )
+        self._save_user_settings()
 
     # 새로운 메시지를 추가하고 자동 스크롤하는 함수
     def add_message(self, message):
