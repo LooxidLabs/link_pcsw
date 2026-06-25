@@ -416,9 +416,9 @@ class App:
 
             state.RAW_DIR.mkdir(exist_ok=True)
             timestamp_str = time.strftime("%Y%m%d_%H%M%S")
-            state.eeg_file = open(state.RAW_DIR / f'eeg_{timestamp_str}.csv', 'w', newline='')
-            state.ppg_file = open(state.RAW_DIR / f'ppg_{timestamp_str}.csv', 'w', newline='')
-            state.acc_file = open(state.RAW_DIR / f'acc_{timestamp_str}.csv', 'w', newline='')
+            state.eeg_file = open(state.RAW_DIR / f'eeg_{timestamp_str}.csv', 'w', newline='', encoding='utf-8')
+            state.ppg_file = open(state.RAW_DIR / f'ppg_{timestamp_str}.csv', 'w', newline='', encoding='utf-8')
+            state.acc_file = open(state.RAW_DIR / f'acc_{timestamp_str}.csv', 'w', newline='', encoding='utf-8')
 
             state.eeg_writer = csv.writer(state.eeg_file)
             state.ppg_writer = csv.writer(state.ppg_file)
