@@ -1,9 +1,9 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.1**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.2**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.1` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.2` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
 
 사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
@@ -13,7 +13,7 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.1)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.2)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
     user_settings.py     # user_settings.json 로드/저장
@@ -121,6 +121,7 @@ build_windows_release.bat
 ### Service Control
 - Battery / Accelerometer / PPG / EEG Write / EEG Notify / Bandpass / Notch / Start·Stop All Sensors
 - 버튼은 **2열 그리드**로 배치되어 가로 폭을 균일하게 유지합니다.
+- BLE **연결 직후** Device Information **Firmware Revision (0x2A26)** GATT Read → Message Log 출력 (없으면 “펌웨어 버전 정보 없음”)
 
 ### EEG Lead-Off · PGA Gain
 - **Lead-Off**: EEG Notify 수신 시 **CH1 + / CH1 − / CH2 + / CH2 −** 4개 LED (그래프 위, Lead-Off 패널)
@@ -188,3 +189,7 @@ build_windows_release.bat
 2. **Lead-Off + Gain 패널** — 그래프 상단 **좌우 배치** (plot 너비 800px 기준).
 3. **사용자 설정 저장** — `user_settings.json`으로 LXB 필터, 로우데이터 출력, 자동 테스트, BPM 계산, PGA Gain **재실행 시 복원**. 파일 없으면 기본값.
 4. **소프트웨어 버전 v2.1** — 창 제목 `LINKBAND PC SW v2.1`.
+
+### 2026-06-20 (v2.2)
+1. **펌웨어 버전 표시** — 연결 시 GATT **Firmware Revision String (0x2A26)** 읽어 Message Log에 출력. characteristic 없음·읽기 실패·빈 값이면 “펌웨어 버전 정보 없음”.
+2. **소프트웨어 버전 v2.2** — 창 제목 `LINKBAND PC SW v2.2`.

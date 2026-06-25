@@ -16,6 +16,33 @@ async def scan_ble_devices(filter_lxb_only=False):
         return filtered_devices
     return devices
 
+
+def _decode_firmware_revision(data: bytes) -> str | None:
+    if not data:
+        return None
+    text = data.decode("utf-8", errors="replace").strip("\x00").strip()
+    return text or None
+
+
+async def _read_firmware_revision(client: BleakClient) -> str | None:
+    try:
+        data = await client.read_gatt_char(constants.FIRMWARE_REVISION_CHAR_UUID)
+    except Exception as exc:
+        state.debug_log(f"connect_ble: firmware read 실패 — {type(exc).__name__}: {exc}")
+        return None
+    return _decode_firmware_revision(data)
+
+
+def _schedule_firmware_revision_message(revision: str | None) -> None:
+    if revision:
+        message = f"Firmware Revision (0x2A26): {revision}"
+    else:
+        message = "Firmware Revision (0x2A26): 펌웨어 버전 정보 없음"
+    if state.global_app is None:
+        return
+    state._run_on_ui(lambda msg=message: state.global_app.add_message(msg))
+
+
 async def connect_ble(device_address):
     client = BleakClient(device_address)
     try:
@@ -37,6 +64,8 @@ async def connect_ble(device_address):
                 state.global_app.add_message(f"Battery read on connect: {err}")
 
             state._run_on_ui(_battery_read_fail)
+        firmware_revision = await _read_firmware_revision(client)
+        _schedule_firmware_revision_message(firmware_revision)
         state.disconnect_requested = False
         # 자동 테스트: 연결 완료 후 메인 스레드에서 Start All Sensors 실행
         if state.global_app is not None and getattr(state.global_app, "_auto_test_want_start_sensors", False):
