@@ -290,7 +290,15 @@ class App:
         self.line_acc_x, = self.axs[3].plot([], [], label="Acc X (mg)")
         self.line_acc_y, = self.axs[3].plot([], [], label="Acc Y (mg)")
         self.line_acc_z, = self.axs[3].plot([], [], label="Acc Z (mg)")
-        self.axs[3].legend(loc="upper right")
+        self.axs[3].legend(
+            loc="upper left",
+            fontsize=6,
+            markerscale=0.5,
+            handlelength=1.0,
+            borderpad=0.35,
+            labelspacing=0.35,
+            handletextpad=0.4,
+        )
 
         # Sampling rate
         self.eeg_times = deque()

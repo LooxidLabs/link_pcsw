@@ -1,9 +1,9 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.1**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.2**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.1` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.2` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
 
 사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
@@ -13,7 +13,7 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.3.1)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.3.2)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
     user_settings.py     # user_settings.json 로드/저장
@@ -202,3 +202,7 @@ build_windows_release.bat
 1. **가속도 파싱 수정** — LIS3DH int16 little-endian 6바이트 샘플 → `>> 4` → **mg** (`app/signal/acc_scale.py`). CSV 헤더 `acc_x_mg` / `acc_y_mg` / `acc_z_mg`. ODR **25 Hz** (`ACC_SAMPLE_RATE`).
 2. **그래프 범례** — EEG/PPG 범례 제거(제목만), ACC 범례 `upper right` 고정.
 3. **소프트웨어 버전 v2.3.1** — 창 제목 `LINKBAND PC SW v2.3.1`.
+
+### 2026-06-26 (v2.3.2)
+1. **ACC 그래프 범례** — 좌상단(`upper left`) 고정, 글자·마커 크기 약 절반.
+2. **소프트웨어 버전 v2.3.2** — 창 제목 `LINKBAND PC SW v2.3.2`.
