@@ -40,6 +40,14 @@ class LeadOffPanel:
             tk.Label(cell, text=label, font=("Arial", 10)).pack(side=tk.LEFT, padx=(4, 0))
             self._led_items[key] = (canvas, led_id)
 
+        self._raw_label = tk.Label(
+            self.frame,
+            text="BIN: ----   HEX: --",
+            font=("Arial", 9),
+            fg="#616161",
+        )
+        self._raw_label.pack(anchor="center", pady=(2, 0))
+
         self._outer.update_idletasks()
         self._outer.config(height=self.frame.winfo_reqheight())
         self._outer.pack_propagate(False)
@@ -50,9 +58,12 @@ class LeadOffPanel:
     def reset(self) -> None:
         for key in self._led_items:
             self._set_color(key, COLOR_UNKNOWN)
+        self._raw_label.config(text="BIN: ----   HEX: --")
 
-    def update_electrodes(self, electrodes: dict[str, bool]) -> None:
+    def update_electrodes(self, electrodes: dict[str, bool], lead_off_raw: int) -> None:
         """electrodes: True=lead-off(빨강), False=lead-on(초록)."""
+        value = lead_off_raw & 0x0F
+        self._raw_label.config(text=f"BIN: 0b{value:04b}   HEX: 0x{value:02X}")
         for key, is_off in electrodes.items():
             if key not in self._led_items:
                 continue

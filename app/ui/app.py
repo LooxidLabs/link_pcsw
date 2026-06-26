@@ -489,7 +489,9 @@ class App:
         if state.eeg_lead_off_raw is None:
             self.lead_off_panel.reset()
         else:
-            self.lead_off_panel.update_electrodes(state.eeg_lead_off_electrodes)
+            self.lead_off_panel.update_electrodes(
+                state.eeg_lead_off_electrodes, state.eeg_lead_off_raw
+            )
 
     def refresh_eeg_gain_controls(self) -> None:
         """EEG Notify 또는 레코딩 중에는 Gain 변경 불가."""

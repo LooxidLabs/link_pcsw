@@ -1,9 +1,9 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.2**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.3**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.2` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.3` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
 
 사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
@@ -13,7 +13,7 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.3.2)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.3.3)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
     user_settings.py     # user_settings.json 로드/저장
@@ -129,6 +129,7 @@ build_windows_release.bat
 - Lead-Off와 Gain 패널은 **그래프 상단 한 줄(좌우 배치)**
 - Gain 변경: EEG Notify·레코딩 **중에는 불가**
 - **초록**: 전극 접촉 · **빨강**: lead-off · **회색**: 데이터 없음
+- **Lead-Off raw**: 4비트 값을 **2진수·16진수**로 패널 하단에 표시 (예: `BIN: 0b0000   HEX: 0x00`)
 - 패킷 포맷: [`docs/eeg-raw-data-format.md`](docs/eeg-raw-data-format.md)
 
 ### 기타
@@ -206,3 +207,7 @@ build_windows_release.bat
 ### 2026-06-26 (v2.3.2)
 1. **ACC 그래프 범례** — 좌상단(`upper left`) 고정, 글자·마커 크기 약 절반.
 2. **소프트웨어 버전 v2.3.2** — 창 제목 `LINKBAND PC SW v2.3.2`.
+
+### 2026-06-26 (v2.3.3)
+1. **Lead-Off 패널** — 4비트 lead-off raw 값을 **2진수·16진수**로 LED 아래 표시.
+2. **소프트웨어 버전 v2.3.3** — 창 제목 `LINKBAND PC SW v2.3.3`.
