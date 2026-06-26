@@ -1,9 +1,9 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.1**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.1` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
 
 사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
@@ -13,12 +13,12 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.3)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.3.1)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
     user_settings.py     # user_settings.json 로드/저장
     ble/                 # BLE 스캔·연결·서비스 토글·notify 콜백
-    signal/              # 필터, EEG lead-off 디코딩, µV 변환(eeg_scale)
+    signal/              # 필터, EEG lead-off, µV(eeg_scale), ACC mg(acc_scale)
     ui/                  # Tkinter GUI, lead-off·PGA gain 패널
   docs/
     eeg-raw-data-format.md   # EEG 패킷·lead-off 비트맵 문서
@@ -197,3 +197,8 @@ build_windows_release.bat
 ### 2026-06-20 (v2.3)
 1. **레코딩 CSV UTF-8** — `raw_data` EEG/PPG/ACC CSV 저장 시 `encoding='utf-8'` 지정. Windows(cp949)에서 `ch1(µV)` 헤더 기록 시 `UnicodeEncodeError` 방지.
 2. **소프트웨어 버전 v2.3** — 창 제목 `LINKBAND PC SW v2.3`.
+
+### 2026-06-26 (v2.3.1)
+1. **가속도 파싱 수정** — LIS3DH int16 little-endian 6바이트 샘플 → `>> 4` → **mg** (`app/signal/acc_scale.py`). CSV 헤더 `acc_x_mg` / `acc_y_mg` / `acc_z_mg`. ODR **25 Hz** (`ACC_SAMPLE_RATE`).
+2. **그래프 범례** — EEG/PPG 범례 제거(제목만), ACC 범례 `upper right` 고정.
+3. **소프트웨어 버전 v2.3.1** — 창 제목 `LINKBAND PC SW v2.3.1`.

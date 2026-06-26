@@ -278,22 +278,19 @@ class App:
         self.fig.tight_layout(pad=3.0)
 
         # EEG Channel 1 (subplot 0)
-        self.line_eeg1, = self.axs[0].plot([], [], label="EEG Channel 1")
-        self.axs[0].legend()
-        
+        self.line_eeg1, = self.axs[0].plot([], [])
+
         # EEG Channel 2 (subplot 1)
-        self.line_eeg2, = self.axs[1].plot([], [], label="EEG Channel 2")
-        self.axs[1].legend()
-        
+        self.line_eeg2, = self.axs[1].plot([], [])
+
         # PPG Data (subplot 2)
-        self.line_ppg, = self.axs[2].plot([], [], label="PPG Data")
-        self.axs[2].legend()
-        
+        self.line_ppg, = self.axs[2].plot([], [])
+
         # Accelerometer Data (subplot 3)
-        self.line_acc_x, = self.axs[3].plot([], [], label="Acc X")
-        self.line_acc_y, = self.axs[3].plot([], [], label="Acc Y")
-        self.line_acc_z, = self.axs[3].plot([], [], label="Acc Z")
-        self.axs[3].legend()
+        self.line_acc_x, = self.axs[3].plot([], [], label="Acc X (mg)")
+        self.line_acc_y, = self.axs[3].plot([], [], label="Acc Y (mg)")
+        self.line_acc_z, = self.axs[3].plot([], [], label="Acc Z (mg)")
+        self.axs[3].legend(loc="upper right")
 
         # Sampling rate
         self.eeg_times = deque()
@@ -425,7 +422,7 @@ class App:
             state.acc_writer = csv.writer(state.acc_file)
             state.eeg_writer.writerow(['timestamp', 'lead-off', 'ch1(µV)', 'ch2(µV)'])
             state.ppg_writer.writerow(['timestamp', 'ppg_red', 'ppg_ir'])
-            state.acc_writer.writerow(['timestamp', 'acc_x', 'acc_y', 'acc_z'])
+            state.acc_writer.writerow(['timestamp', 'acc_x_mg', 'acc_y_mg', 'acc_z_mg'])
 
             state.recording = True
             self.record_btn.config(text="Stop Recording")
@@ -632,7 +629,7 @@ class App:
             self.line_acc_z.set_data(t_acc, acc_z)
             self.axs[3].relim()
             self.axs[3].autoscale_view()
-            self.axs[3].set_title("Accelerometer Data")
+            self.axs[3].set_title("Accelerometer Data (mg)")
         
         self.refresh_lead_off_indicators()
         self.canvas.draw_idle()

@@ -3,42 +3,28 @@ import time
 
 from app import state
 from app import constants
+from app.signal import acc_scale
 from app.signal import eeg_scale
 
 def accelerometer_callback(sender, data):
-    # print(f"({len(data)}) ")
-    # print("Accelerometer data:", data)
-    # timestamp = time.time()
     timeRaw = (data[3] << 24 | data[2] << 16 | data[1] << 8 | data[0])
-    timestamp = timeRaw / 32.768 / 1000 # ms 단위를 나누기 하여 sec 단위로
+    timestamp = timeRaw / 32.768 / 1000  # device clock (sec)
 
-    # 데이터 구조가 6바이트 단위로 반복되는 형식
-    # 총 30개의 샘플이면 30 * 6 = 180바이트 + 앞 4바이트 헤더 = 184 바이트
-    for i in range(4, 184, 6):
-        # accDataX = (data[i] << 8 | data[i+1])
-        # accDataY = (data[i+2] << 8 | data[i+3])
-        # accDataZ = (data[i+4] << 8 | data[i+5])
-        # accDataX = (data[i] | data[i+1] << 8)
-        # accDataY = (data[i+2] | data[i+3] << 8)
-        # accDataZ = (data[i+4] | data[i+5] << 8)
-        # accDataX >>= 4
-        # accDataY >>= 4
-        # accDataZ >>= 4
+    header = constants.ACC_PACKET_HEADER_BYTES
+    stride = constants.ACC_BYTES_PER_SAMPLE
+    end = header + constants.ACC_SAMPLES_PER_PACKET * stride
 
-        accDataX = (data[i+1])
-        accDataY = (data[i+3])
-        accDataZ = (data[i+5])
-        
-        state.data_buffer["acc_x"].append(accDataX)
-        state.data_buffer["acc_y"].append(accDataY)
-        state.data_buffer["acc_z"].append(accDataZ)
-        
-        # CSV 파일에 기록
+    for sample_idx, i in enumerate(range(header, end, stride)):
+        acc_x, acc_y, acc_z = acc_scale.parse_sample_xyz(data, i)
+
+        state.data_buffer["acc_x"].append(acc_x)
+        state.data_buffer["acc_y"].append(acc_y)
+        state.data_buffer["acc_z"].append(acc_z)
+
         if state.recording:
-            state.acc_writer.writerow([timestamp, accDataX, accDataY, accDataZ])
-            timestamp += 1.0 / constants.ACC_SAMPLE_RATE  # 다음 샘플 타임스탬프 증가    
-        
-        # print(f"{data[i]},{data[i+1]}, - {data[i+2]},{data[i+3]}, - {data[i+4]},{data[i+5]} - {accDataX},{accDataY},{accDataZ}")
+            sample_ts = timestamp + sample_idx / constants.ACC_SAMPLE_RATE
+            state.acc_writer.writerow([sample_ts, acc_x, acc_y, acc_z])
+
         if state.global_app is not None and not state.shutting_down:
             state.global_app.acc_times.append(time.time())
     

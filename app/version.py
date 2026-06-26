@@ -1,7 +1,7 @@
 """Application name and version (single source of truth)."""
 
 APP_NAME = "LINKBAND PC SW"
-APP_VERSION = "2.3"
+APP_VERSION = "2.3.1"
 
 
 def window_title() -> str:
