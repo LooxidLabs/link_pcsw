@@ -1,9 +1,9 @@
 # PPG_TEST
 
 ## Overview
-링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.3**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
+링크밴드 2.0 버전을 테스트하기 위한 PC SW (**v2.3.4**). **Windows / macOS** 모두 실행 가능 (Python 3.8+, 동일 코드베이스).
 
-애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.3` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
+애플리케이션 코드는 `app/` 패키지로 구성되어 있으며, 엔트리 포인트는 `app/main.py`입니다. 실행 시 **창 제목**에 `LINKBAND PC SW v2.3.4` 형태로 버전이 표시됩니다. 버전 번호는 `app/version.py`의 `APP_VERSION`에서 관리합니다.
 
 사용자 UI 설정(체크박스, EEG PGA Gain)은 프로젝트 루트(또는 exe 옆)의 **`user_settings.json`**에 저장되며, 다음 실행 시 복원됩니다. 파일이 없으면 기본값으로 시작합니다.
 
@@ -13,7 +13,7 @@
 link_pcsw/
   app/
     main.py              # 앱 엔트리 (Tk mainloop)
-    version.py           # 앱 이름·버전 (APP_VERSION=2.3.3)
+    version.py           # 앱 이름·버전 (APP_VERSION=2.3.4)
     constants.py         # UUID, 샘플레이트, 창/플롯 크기 상수
     state.py             # 런타임 상태, UI 콜백 큐
     user_settings.py     # user_settings.json 로드/저장
@@ -109,7 +109,8 @@ build_windows_release.bat
 
 - 스캔 결과는 최대 5대(`MAX_SCAN_LIST_DEVICES`)만 리스트에 표시됩니다.
 - 자동 연결 대상은 스캔 결과를 RSSI 기준으로 정렬한 뒤 첫 번째 디바이스입니다.
-- 자동 모드에서 연결 성공 시 `Start All Sensors`가 자동 실행됩니다.
+- 자동 모드에서 연결 성공 시 `Start All Sensors`가 자동 실행됩니다. (연결 완료 후 **0.5초** 뒤)
+- `Start All Sensors` 센서 시작 순서: **ACC (즉시)** → **PPG (+200ms)** → **EEG Notify (+400ms, PPG 후 200ms)**. EEG Write는 포함되지 않습니다.
 
 디버그 로그:
 
@@ -122,6 +123,7 @@ build_windows_release.bat
 - Battery / Accelerometer / PPG / EEG Write / EEG Notify / Bandpass / Notch / Start·Stop All Sensors
 - 버튼은 **2열 그리드**로 배치되어 가로 폭을 균일하게 유지합니다.
 - BLE **연결 직후** Device Information **Firmware Revision (0x2A26)** GATT Read → Message Log 출력 (없으면 “펌웨어 버전 정보 없음”)
+- **Start All Sensors**: ACC → 200ms 후 PPG → 200ms 후 EEG Notify (총 ACC 기준 +400ms). EEG Write 제외.
 
 ### EEG Lead-Off · PGA Gain
 - **Lead-Off**: EEG Notify 수신 시 **CH1 + / CH1 − / CH2 + / CH2 −** 4개 LED (그래프 위, Lead-Off 패널)
@@ -211,3 +213,7 @@ build_windows_release.bat
 ### 2026-06-26 (v2.3.3)
 1. **Lead-Off 패널** — 4비트 lead-off raw 값을 **2진수·16진수**로 LED 아래 표시.
 2. **소프트웨어 버전 v2.3.3** — 창 제목 `LINKBAND PC SW v2.3.3`.
+
+### 2026-08-07 (v2.3.4)
+1. **Start All Sensors 순서** — ACC(즉시) → PPG(+200ms) → EEG Notify(+400ms). PPG와 EEG를 동시에 켜던 동작을 순차로 변경.
+2. **소프트웨어 버전 v2.3.4** — 창 제목 `LINKBAND PC SW v2.3.4`.
