@@ -1023,7 +1023,7 @@ class App:
             [self.add_message("[All Sensors] PPG 시작..."), toggle_ppg(self)]
             if not self.ppg_running else None
         ))
-        self.root.after(200, lambda: (
+        self.root.after(400, lambda: (
             [self.add_message("[All Sensors] EEG Notify 시작..."), toggle_eeg_notify(self)]
             if not self.eeg_notify_running else None
         ))
